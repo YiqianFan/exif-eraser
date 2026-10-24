@@ -1,0 +1,11 @@
+# 测试夹具与输出（由脚本生成，不入库）
+test/imgs/
+test/out/
+
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db
+
+# Mimosa hook 会话状态
+.mimosa/

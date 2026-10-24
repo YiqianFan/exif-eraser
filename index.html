@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>EXIF 一键抹除 · 本地离线工具</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 20% -10%, #1a2333 0%, #0f1115 55%) fixed, #0f1115;
+    color: #e6e8ee;
+    font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 34px 20px 70px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .5px; }
+  .subtitle { color: #9aa3b5; font-size: 13px; margin-bottom: 22px; }
+  .subtitle .lock { color: #7fd18c; }
+
+  #dropzone {
+    border: 1.5px dashed #3a4152;
+    border-radius: 16px;
+    padding: 46px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s, background .18s, transform .12s;
+    user-select: none;
+  }
+  #dropzone:hover, #dropzone:focus-visible, #dropzone.drag {
+    border-color: #5b8cff;
+    background: rgba(91, 140, 255, .07);
+    outline: none;
+  }
+  #dropzone.drag { transform: scale(1.008); }
+  #dropzone .icon { font-size: 34px; display: block; margin-bottom: 10px; }
+  #dropzone .main { font-size: 16px; color: #dfe3ec; }
+  #dropzone .hint { font-size: 12.5px; color: #8b93a7; margin-top: 8px; }
+
+  #summary { display: none; margin: 18px 2px 10px; font-size: 13px; color: #9aa3b5; }
+
+  #list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; max-height: 560px; overflow-y: auto; padding-right: 2px; }
+
+  .settings {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 16px 2px 0; font-size: 13.5px; color: #aab2c5;
+  }
+  .settings select {
+    background: #1b202b; color: #e6e8ee; border: 1px solid #2e3449;
+    border-radius: 8px; padding: 7px 10px; font-size: 13.5px; font-family: inherit; cursor: pointer;
+  }
+  .settings .note { font-size: 12px; color: #79808f; }
+  .row {
+    display: flex; align-items: center; gap: 13px;
+    background: #171a21; border: 1px solid #232836; border-radius: 13px;
+    padding: 11px 13px;
+  }
+  .row img.thumb {
+    width: 48px; height: 48px; border-radius: 9px; object-fit: cover;
+    background: #0f1115; flex: none;
+  }
+  .row .info { flex: 1; min-width: 0; }
+  .row .name {
+    font-size: 14px; color: #e8ebf2; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row .sub { font-size: 12.5px; color: #8b93a7; margin-top: 2px; }
+  .row .sub b { color: #7fd18c; font-weight: 600; }
+  .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 20px;
+    background: #1f2937; color: #a5b4d0; border: 1px solid #2a3244;
+  }
+  .tag.ok    { background: rgba(96, 190, 120, .12);  color: #8fd8a0; border-color: rgba(96, 190, 120, .35); }
+  .tag.gps   { background: rgba(235, 110, 110, .14); color: #f1a0a0; border-color: rgba(235, 110, 110, .45); }
+  .tag.warn  { background: rgba(235, 180, 90, .12);  color: #ecc48a; border-color: rgba(235, 180, 90, .38); }
+  .tag.muted { background: transparent; color: #6c7488; border-color: #2a3040; }
+
+  .row .btn {
+    flex: none; border: 1px solid #2e3449; border-radius: 9px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+    background: #222838; color: #cdd6ea; font-family: inherit;
+    transition: background .15s, border-color .15s;
+  }
+  .row .btn:hover:not(:disabled) { background: #2b3450; border-color: #3b4460; }
+  .row .btn:disabled { opacity: .35; cursor: default; }
+
+  #actions { display: none; margin-top: 16px; gap: 10px; }
+  #actions button {
+    border-radius: 10px; padding: 10px 18px; font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  #downloadAll { background: #3468e0; border: 1px solid #3468e0; color: #fff; }
+  #downloadAll:hover { background: #4478ea; }
+  #clearAll { background: transparent; border: 1px solid #333b4d; color: #9aa3b5; }
+  #clearAll:hover { border-color: #465069; color: #c3cadb; }
+
+  footer {
+    margin-top: 30px; padding-top: 16px; border-top: 1px solid #1d222d;
+    font-size: 12.5px; color: #79808f; line-height: 1.9;
+  }
+  footer b { color: #98a0b3; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>照片 EXIF 一键抹除</h1>
+  <div class="subtitle"><span class="lock">🔒 所有处理均在本机浏览器内完成</span> · 断网也能用 · 照片不会上传到任何服务器</div>
+
+  <div id="dropzone" tabindex="0" role="button" aria-label="选择或拖入照片">
+    <span class="icon">🖼️</span>
+    <div class="main">拖拽照片到这里，或点击选择（可多选，支持 Ctrl+V 粘贴）</div>
+    <div class="hint">支持 JPEG / PNG / WebP / GIF / BMP · 竖拍照片自动转正 · 可选输出格式</div>
+  </div>
+  <input id="fileInput" type="file" multiple accept="image/*" hidden>
+
+  <div class="settings">
+    <label for="fmtSelect">输出格式</label>
+    <select id="fmtSelect">
+      <option value="auto">自动（保持原格式，优先无损）</option>
+      <option value="image/jpeg">JPEG（通用兼容，无透明）</option>
+      <option value="image/png">PNG（无损，体积较大）</option>
+      <option value="image/webp">WebP（体积小）</option>
+    </select>
+    <span class="note">选非“自动”会重新编码（质量约 92%，元数据随转换彻底清除）；切换后已加入的照片会自动重新处理</span>
+  </div>
+
+  <div id="summary"></div>
+  <div id="list"></div>
+  <div id="actions">
+    <button id="downloadAll">⬇ 全部下载</button>
+    <button id="clearAll">清空列表</button>
+  </div>
+
+  <footer>
+    <b>支持格式：</b>JPEG / PNG / WebP / GIF（动图无损）/ BMP 可直接清理；AVIF 请用上方“输出格式”转换清理；HEIC 请先转成 JPEG。<br>
+    <b>会移除什么：</b>EXIF（拍摄时间、相机型号、GPS 定位等）、XMP、IPTC/Photoshop 数据、注释、多图索引。<br>
+    <b>保留什么：</b>像素数据不动（无损）、色彩配置（ICC）、JFIF 结构信息。<br>
+    <b>竖拍照片</b>原带的“方向”标签属于 EXIF，抹除后会导致显示旋转——这类照片会先自动转正再输出（重新编码，画质几乎无损）。<br>
+    <b>验证效果：</b>下载后在文件上右键 → 属性 → 详细信息，应看不到拍摄设备与位置信息。
+  </footer>
+</div>
+
+<script>
+/*CORE-BEGIN*/
+function detectFormat(b) {
+  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'jpeg';
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 &&
+      b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A) return 'png';
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'webp';
+  if (b.length >= 13 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'gif';
+  if (b.length >= 54 && b[0] === 0x42 && b[1] === 0x4D) return 'bmp';
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    var brand = String.fromCharCode(b[8], b[9], b[10], b[11]);
+    if (/^(heic|heix|hevc|hevx|mif1|msf1)$/.test(brand)) return 'heic';
+    if (brand === 'avif' || brand === 'avis') return 'avif';
+  }
+  return 'unknown';
+}
+
+function asciiAt(b, off, s) {
+  for (var i = 0; i < s.length; i++) {
+    var c = b[off + i];
+    if (c === undefined || c !== s.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
+function parseExif(t) {
+  var r = { orientation: 1, gps: false };
+  if (t.length < 8) return r;
+  var be = t[0] === 0x4D && t[1] === 0x4D;
+  var le = t[0] === 0x49 && t[1] === 0x49;
+  if (!be && !le) return r;
+  function u16(o) { return le ? (t[o] | (t[o + 1] << 8)) : ((t[o] << 8) | t[o + 1]); }
+  function u32(o) {
+    return le ? ((t[o] | (t[o + 1] << 8) | (t[o + 2] << 16) | (t[o + 3] << 24)) >>> 0)
+              : (((t[o] << 24) | (t[o + 1] << 16) | (t[o + 2] << 8) | t[o + 3]) >>> 0);
+  }
+  if (u16(2) !== 42) return r;
+  var ifd0 = u32(4);
+  if (ifd0 + 2 > t.length) return r;
+  var n = u16(ifd0);
+  for (var k = 0; k < n; k++) {
+    var e = ifd0 + 2 + k * 12;
+    if (e + 12 > t.length) break;
+    var tag = u16(e);
+    if (tag === 0x0112) r.orientation = u16(e + 8);
+    else if (tag === 0x8825) r.gps = true;
+  }
+  return r;
+}
+
+function concatParts(parts) {
+  var total = 0;
+  for (var i = 0; i < parts.length; i++) total += parts[i].length;
+  var out = new Uint8Array(total);
+  var o = 0;
+  for (var j = 0; j < parts.length; j++) { out.set(parts[j], o); o += parts[j].length; }
+  return out;
+}
+
+function stripJpeg(b) {
+  var rm = { exif: false, xmp: false, ps: false, com: false, mpf: false };
+  var gps = false, orientation = 1;
+  var parts = [b.subarray(0, 2)];
+  var i = 2;
+  while (i + 2 <= b.length) {
+    if (b[i] !== 0xFF) return null;
+    var m = b[i + 1];
+    if (m === 0x01 || m === 0xD8 || (m >= 0xD0 && m <= 0xD7)) {
+      parts.push(b.subarray(i, i + 2)); i += 2; continue;
+    }
+    if (m === 0xD9) { parts.push(b.subarray(i)); i = b.length; break; }
+    if (i + 4 > b.length) return null;
+    var len = (b[i + 2] << 8) | b[i + 3];
+    if (len < 2 || i + 2 + len > b.length) return null;
+    var end = i + 2 + len;
+    if (m === 0xDA) { parts.push(b.subarray(i)); i = b.length; break; }
+    var p = i + 4;
+    if (m === 0xE1 && asciiAt(b, p, 'Exif\0\0')) {
+      rm.exif = true;
+      var t = parseExif(b.subarray(p + 6, end));
+      gps = t.gps; orientation = t.orientation;
+      i = end; continue;
+    }
+    if (m === 0xE1 && asciiAt(b, p, 'http://ns.adobe.com/')) { rm.xmp = true; i = end; continue; }
+    if (m === 0xE2 && asciiAt(b, p, 'MPF\0')) { rm.mpf = true; i = end; continue; }
+    if (m === 0xED) { rm.ps = true; i = end; continue; }
+    if (m === 0xFE) { rm.com = true; i = end; continue; }
+    parts.push(b.subarray(i, end));
+    i = end;
+  }
+  return { out: concatParts(parts), rm: rm, gps: gps, orientation: orientation };
+}
+
+function stripPng(b) {
+  var rm = { exif: false, text: false, time: false };
+  var dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  var parts = [b.subarray(0, 8)];
+  var i = 8;
+  while (i + 8 <= b.length) {
+    var len = dv.getUint32(i);
+    var type = String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]);
+    var total = 12 + len;
+    if (i + total > b.length) break;
+    if (type === 'eXIf') { rm.exif = true; }
+    else if (type === 'tEXt' || type === 'zTXt' || type === 'iTXt') { rm.text = true; }
+    else if (type === 'tIME') { rm.time = true; }
+    else parts.push(b.subarray(i, i + total));
+    i += total;
+    if (type === 'IEND') { parts.push(b.subarray(i)); i = b.length; }
+  }
+  return { out: concatParts(parts), rm: rm };
+}
+
+function stripWebp(b) {
+  var rm = { exif: false, xmp: false };
+  var dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  var parts = [];
+  var i = 12;
+  while (i + 8 <= b.length) {
+    var cc = String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+    var sz = dv.getUint32(i + 4, true);
+    var total = 8 + sz + (sz & 1);
+    if (i + total > b.length) break;
+    if (cc === 'EXIF') { rm.exif = true; }
+    else if (cc === 'XMP ') { rm.xmp = true; }
+    else parts.push(b.subarray(i, i + total));
+    i += total;
+  }
+  var payload = 4;
+  for (var j = 0; j < parts.length; j++) payload += parts[j].length;
+  var out = new Uint8Array(8 + payload);
+  out.set(b.subarray(0, 4), 0);
+  new DataView(out.buffer).setUint32(4, payload, true);
+  out.set(b.subarray(8, 12), 8);
+  var o = 12;
+  for (var k = 0; k < parts.length; k++) { out.set(parts[k], o); o += parts[k].length; }
+  return { out: out, rm: rm };
+}
+
+function stripGif(b) {
+  if (!asciiAt(b, 0, 'GIF8')) return null;
+  var rm = { com: false, xmp: false };
+  var images = 0;
+  var flags = b[10];
+  var i = 13;
+  if (flags & 0x80) i += 3 * (1 << ((flags & 7) + 1));
+  if (i > b.length) return null;
+  var parts = [b.subarray(0, i)];
+  while (i < b.length) {
+    var c = b[i];
+    if (c === 0x3B) { parts.push(b.subarray(i)); i = b.length; break; }
+    if (c === 0x21) {
+      var label = b[i + 1];
+      var j = i + 2;
+      var drop = false;
+      if (label === 0xFE) { rm.com = true; drop = true; }
+      else if (label === 0xFF) {
+        var sz0 = b[j];
+        if (asciiAt(b, j + 1, 'XMP DataXMP')) { rm.xmp = true; drop = true; }
+        j += 1 + sz0;
+      }
+      while (j < b.length) { var s = b[j]; j++; if (s === 0) break; j += s; }
+      if (j > b.length) return null;
+      if (!drop) parts.push(b.subarray(i, j));
+      i = j;
+    } else if (c === 0x2C) {
+      images++;
+      var k = i + 10;
+      var lf = b[i + 9];
+      if (lf & 0x80) k += 3 * (1 << ((lf & 7) + 1));
+      k++; // LZW 最小码长
+      while (k < b.length) { var s2 = b[k]; k++; if (s2 === 0) break; k += s2; }
+      if (k > b.length) return null;
+      parts.push(b.subarray(i, k));
+      i = k;
+    } else {
+      parts.push(b.subarray(i)); i = b.length; break; // 未知块：剩余部分原样保留
+    }
+  }
+  return { out: concatParts(parts), rm: rm, animated: images > 1 };
+}
+
+function outName(name, mime) {
+  var dot = name.lastIndexOf('.');
+  var base = dot > 0 ? name.slice(0, dot) : name;
+  var ext = dot > 0 ? name.slice(dot) : '';
+  var map = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+  if (mime && map[mime]) return base + '_noexif' + map[mime];
+  return base + '_noexif' + ext;
+}
+/*CORE-END*/
+
+/* ---------- 浏览器处理流程（依赖上面的核心函数） ---------- */
+
+var OUTPUT = { mode: 'auto' }; // 输出格式：'auto' 或 'image/jpeg' / 'image/png' / 'image/webp'
+
+function decodeToCanvas(file) {
+  return createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (bmp) {
+    var c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    return { canvas: c, ctx: c.getContext('2d'), bmp: bmp };
+  });
+}
+
+function bakeOrientationJpeg(file) {
+  return decodeToCanvas(file).then(function (d) {
+    d.ctx.drawImage(d.bmp, 0, 0);
+    if (d.bmp.close) d.bmp.close();
+    return new Promise(function (res) { d.canvas.toBlob(res, 'image/jpeg', 0.95); });
+  });
+}
+
+function reencodeTo(file, mime) {
+  return decodeToCanvas(file).then(function (d) {
+    if (mime === 'image/jpeg') { d.ctx.fillStyle = '#fff'; d.ctx.fillRect(0, 0, d.canvas.width, d.canvas.height); }
+    d.ctx.drawImage(d.bmp, 0, 0);
+    if (d.bmp.close) d.bmp.close();
+    return new Promise(function (res) {
+      d.canvas.toBlob(function (blob) {
+        if (!blob) { res(null); return; }
+        // Safari/Firefox 不支持 canvas 编码 WebP 时会静默回退成 PNG——必须校验真实类型
+        var actual = blob.type || mime;
+        res({ blob: blob, actualMime: actual, fallback: actual !== mime });
+      }, mime, 0.92);
+    });
+  });
+}
+
+var CAN_DECODE = { jpeg: 1, png: 1, webp: 1, avif: 1, bmp: 1, gif: 1 };
+
+function cleanImage(file) {
+  return file.arrayBuffer().then(function (ab) {
+    var buf = new Uint8Array(ab);
+    var fmt = detectFormat(buf);
+    var res = { fmt: fmt, status: 'done', rm: null, gps: false, orientation: 1, reencoded: false, converted: false, mimeFallback: false, requested: '', animated: false, blob: null, mime: '', note: '' };
+
+    if (fmt === 'unknown') { res.status = 'unsupported'; res.note = '无法识别的图片格式'; return res; }
+    if (fmt === 'heic') { res.status = 'unsupported'; res.note = 'HEIC 浏览器无法解码：请在 iPhone 上改存 JPEG，或先转换格式'; return res; }
+
+    var probe = null;
+    if (fmt === 'jpeg') probe = stripJpeg(buf);
+    else if (fmt === 'png') probe = stripPng(buf);
+    else if (fmt === 'webp') probe = stripWebp(buf);
+    else if (fmt === 'gif') {
+      probe = stripGif(buf);
+      if (!probe) { res.status = 'error'; res.note = 'GIF 结构异常，已跳过（未改动）'; return res; }
+      res.animated = !!probe.animated;
+    }
+    if (probe) { res.rm = probe.rm; res.gps = !!probe.gps; res.orientation = probe.orientation || 1; }
+
+    // 显式输出格式：统一重新编码，元数据随转换彻底清除
+    if (OUTPUT.mode !== 'auto') {
+      if (!CAN_DECODE[fmt]) { res.status = 'unsupported'; res.note = '该格式无法在浏览器中解码，不能转换'; return res; }
+      res.requested = OUTPUT.mode;
+      return reencodeTo(file, OUTPUT.mode).then(function (r) {
+        if (r && r.blob && r.blob.size > 0) {
+          res.blob = r.blob; res.mime = r.actualMime; res.converted = true; res.mimeFallback = r.fallback;
+          return res;
+        }
+        res.status = 'error'; res.note = '编码失败，请换一种输出格式试试';
+        return res;
+      }, function () {
+        res.status = 'error'; res.note = '解码失败（文件可能损坏或过大）';
+        return res;
+      });
+    }
+
+    // 自动模式：能字节级无损剥离的就无损
+    if (fmt === 'jpeg') {
+      if (!probe) { res.status = 'error'; res.note = '文件结构异常，已跳过（未改动）'; return res; }
+      if (!(probe.rm.exif || probe.rm.xmp || probe.rm.ps || probe.rm.com || probe.rm.mpf)) {
+        res.status = 'clean'; res.note = '未发现可移除的元数据'; return res;
+      }
+      if (probe.orientation > 1) {
+        return bakeOrientationJpeg(file).then(function (blob) {
+          if (blob && blob.size > 0) {
+            res.blob = blob; res.reencoded = true; res.mime = 'image/jpeg';
+            return res;
+          }
+          res.blob = new Blob([probe.out], { type: 'image/jpeg' }); res.mime = 'image/jpeg';
+          return res;
+        }, function () {
+          res.blob = new Blob([probe.out], { type: 'image/jpeg' }); res.mime = 'image/jpeg';
+          return res;
+        });
+      }
+      res.blob = new Blob([probe.out], { type: 'image/jpeg' }); res.mime = 'image/jpeg';
+      return res;
+    }
+    if (fmt === 'png') {
+      if (!(probe.rm.exif || probe.rm.text || probe.rm.time)) { res.status = 'clean'; res.note = '未发现可移除的元数据'; return res; }
+      res.blob = new Blob([probe.out], { type: 'image/png' }); res.mime = 'image/png';
+      return res;
+    }
+    if (fmt === 'webp') {
+      if (!(probe.rm.exif || probe.rm.xmp)) { res.status = 'clean'; res.note = '未发现可移除的元数据'; return res; }
+      res.blob = new Blob([probe.out], { type: 'image/webp' }); res.mime = 'image/webp';
+      return res;
+    }
+    if (fmt === 'gif') {
+      if (!(probe.rm.com || probe.rm.xmp)) { res.status = 'clean'; res.note = '未发现可移除的元数据'; return res; }
+      res.blob = new Blob([probe.out], { type: 'image/gif' }); res.mime = 'image/gif';
+      return res;
+    }
+    if (fmt === 'bmp') { res.status = 'clean'; res.note = '未发现可移除的元数据（BMP 不含 EXIF）'; return res; }
+    if (fmt === 'avif') { res.status = 'unsupported'; res.note = 'AVIF 无法无损剥离：请把输出格式选为 JPEG / PNG / WebP（转换即彻底清除）'; return res; }
+    res.status = 'unsupported'; res.note = '未支持的格式';
+    return res;
+  });
+}
+
+/* ---------- UI ---------- */
+
+(function () {
+  var dropEl = document.getElementById('dropzone');
+  var inputEl = document.getElementById('fileInput');
+  var listEl = document.getElementById('list');
+  var summaryEl = document.getElementById('summary');
+  var actionsEl = document.getElementById('actions');
+  var fmtSelect = document.getElementById('fmtSelect');
+  var dlAllEl = document.getElementById('downloadAll');
+  var clearEl = document.getElementById('clearAll');
+
+  var items = [];
+  var processing = false;
+  var pendingRun = false;
+
+  function fmtSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function triggerDownload(blob, name) {
+    var a = document.createElement('a');
+    var url = URL.createObjectURL(blob);
+    a.href = url; a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 8000);
+  }
+
+  function addFiles(files) {
+    var added = false;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var dup = false;
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].file.name === f.name && items[j].file.size === f.size && items[j].file.lastModified === f.lastModified) { dup = true; break; }
+      }
+      if (dup) continue;
+      added = true;
+      var it = { file: f, done: false };
+      items.push(it);
+      appendRow(it);
+    }
+    if (added) processQueue();
+  }
+
+  function appendRow(it) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    var thumbHtml = it.file.type.indexOf('image/') === 0
+      ? '<img class="thumb" alt="" src="' + URL.createObjectURL(it.file) + '" onerror="this.style.visibility=\'hidden\'">'
+      : '<img class="thumb" alt="" style="visibility:hidden" src="">';
+    row.innerHTML = thumbHtml +
+      '<div class="info">' +
+        '<div class="name">' + esc(it.file.name) + '</div>' +
+        '<div class="sub sub-size">' + fmtSize(it.file.size) + '</div>' +
+        '<div class="tags"><span class="tag muted">处理中…</span></div>' +
+      '</div>' +
+      '<button class="btn" disabled>下载</button>';
+    it.el = row;
+    it.thumbUrl = it.file.type.indexOf('image/') === 0 ? row.querySelector('.thumb').src : null;
+    it.btn = row.querySelector('button');
+    it.btn.addEventListener('click', function () {
+      if (it.result && it.result.blob) triggerDownload(it.result.blob, outName(it.file.name, it.result.mime));
+    });
+    listEl.appendChild(row);
+    actionsEl.style.display = 'flex';
+  }
+
+  function renderResult(it) {
+    var r = it.result;
+    var sub = it.el.querySelector('.sub-size');
+    var tagsEl = it.el.querySelector('.tags');
+    var html = '';
+    if (r.status === 'done') {
+      var saved = it.file.size - r.blob.size;
+      sub.innerHTML = fmtSize(it.file.size) + ' → ' + fmtSize(r.blob.size) +
+        (saved > 0 ? '（<b>省 ' + fmtSize(saved) + '</b>）'
+                   : (r.reencoded ? '（转正重编码）' : (r.converted ? '（重新编码）' : '')));
+      var rm = r.rm || {};
+      var fmtLabel = { 'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP' };
+      if (r.converted) html += '<span class="tag ok">已转为 ' + (fmtLabel[r.mime] || '新格式') + ' 并清除全部元数据</span>';
+      if (r.mimeFallback) html += '<span class="tag warn">⚠ 此浏览器不支持 ' + (fmtLabel[r.requested] || '所选格式') + ' 编码，已回退为 ' + (fmtLabel[r.mime] || '') + '</span>';
+      if (rm.exif && !r.converted) html += '<span class="tag ok">EXIF 已清除</span>';
+      if (r.gps) html += '<span class="tag gps">⚠ GPS 定位已清除</span>';
+      if (rm.xmp && !r.converted) html += '<span class="tag ok">XMP 已清除</span>';
+      if (rm.ps) html += '<span class="tag ok">IPTC/Photoshop 已清除</span>';
+      if (rm.com) html += '<span class="tag ok">注释已清除</span>';
+      if (rm.mpf) html += '<span class="tag ok">多图索引已清除</span>';
+      if (rm.text) html += '<span class="tag ok">文本信息已清除</span>';
+      if (rm.time) html += '<span class="tag ok">修改时间已清除</span>';
+      if (r.reencoded) html += '<span class="tag warn">已自动转正（重新编码）</span>';
+      if (r.animated && r.converted) html += '<span class="tag gps">⚠ 动图仅保留第一帧</span>';
+      it.btn.disabled = false;
+    } else if (r.status === 'clean') {
+      sub.innerHTML = fmtSize(it.file.size);
+      html = '<span class="tag muted">' + esc(r.note) + '</span>';
+    } else {
+      sub.innerHTML = fmtSize(it.file.size);
+      html = '<span class="tag ' + (r.status === 'error' ? 'gps' : 'warn') + '">' + esc(r.note || '处理失败') + '</span>';
+    }
+    tagsEl.innerHTML = html;
+  }
+
+  function refreshSummary() {
+    var done = 0, cleaned = 0, saved = 0, gpsCount = 0;
+    for (var i = 0; i < items.length; i++) {
+      var r = items[i].result;
+      if (!r) continue;
+      done++;
+      if (r.status === 'done') { cleaned++; saved += Math.max(0, items[i].file.size - r.blob.size); if (r.gps) gpsCount++; }
+    }
+    if (!done) { summaryEl.style.display = 'none'; return; }
+    summaryEl.style.display = 'block';
+    summaryEl.innerHTML = '已处理 ' + done + ' 个文件，清除元数据 ' + cleaned + ' 个' +
+      (gpsCount ? '，其中 <span style="color:#f1a0a0">' + gpsCount + ' 个含 GPS 定位</span>' : '') +
+      (saved > 0 ? '，共减小 ' + fmtSize(saved) : '');
+  }
+
+  function processQueue() {
+    if (processing) { pendingRun = true; return; }
+    processing = true;
+    var idx = 0;
+    function next() {
+      while (idx < items.length && items[idx].done) idx++;
+      if (idx >= items.length) {
+        processing = false;
+        refreshSummary();
+        if (pendingRun) { pendingRun = false; processQueue(); }
+        return;
+      }
+      var it = items[idx];
+      it.done = true;
+      cleanImage(it.file).then(function (r) {
+        it.result = r;
+        renderResult(it);
+        idx++;
+        next();
+      }, function (err) {
+        it.result = { status: 'error', note: '处理出错：' + (err && err.message ? err.message : '未知错误') };
+        renderResult(it);
+        idx++;
+        next();
+      });
+    }
+    next();
+  }
+
+  dropEl.addEventListener('click', function () { inputEl.click(); });
+  dropEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputEl.click(); } });
+  inputEl.addEventListener('change', function () { addFiles(inputEl.files); inputEl.value = ''; });
+
+  fmtSelect.addEventListener('change', function () {
+    OUTPUT.mode = fmtSelect.value;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      it.done = false;
+      it.result = null;
+      it.el.querySelector('.tags').innerHTML = '<span class="tag muted">处理中…</span>';
+      it.el.querySelector('.sub-size').textContent = fmtSize(it.file.size);
+      it.btn.disabled = true;
+    }
+    if (items.length) processQueue();
+  });
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropEl.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dropEl.classList.add('drag'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropEl.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dropEl.classList.remove('drag'); });
+  });
+  dropEl.addEventListener('drop', function (e) {
+    if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); });
+  window.addEventListener('paste', function (e) {
+    if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length) addFiles(e.clipboardData.files);
+  });
+
+  dlAllEl.addEventListener('click', function () {
+    var list = items.filter(function (it) { return it.result && it.result.status === 'done' && it.result.blob; });
+    var i = 0;
+    (function step() {
+      if (i >= list.length) return;
+      var it = list[i++];
+      triggerDownload(it.result.blob, outName(it.file.name, it.result.mime));
+      setTimeout(step, 350);
+    })();
+  });
+
+  clearEl.addEventListener('click', function () {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].thumbUrl) URL.revokeObjectURL(items[i].thumbUrl);
+    }
+    items = [];
+    listEl.innerHTML = '';
+    summaryEl.style.display = 'none';
+    actionsEl.style.display = 'none';
+  });
+})();
+</script>
+</body>
+</html>
