@@ -48,6 +48,12 @@ exif5[0x0110] = 'TestCam'
 img5 = Image.new('RGB', (48, 48), (200, 200, 60))
 img5.save(os.path.join(OUT, 'with_exif.webp'), exif=exif5.tobytes())
 
+# 6) PNG / WebP：仅带方向标签（Orientation=6，竖拍）
+exif6 = Image.Exif()
+exif6[0x0112] = 6
+Image.new('RGB', (40, 60), (120, 60, 180)).save(os.path.join(OUT, 'with_orient.png'), exif=exif6)
+Image.new('RGB', (40, 60), (60, 180, 120)).save(os.path.join(OUT, 'with_orient.webp'), exif=exif6.tobytes())
+
 # 生成后自检：确认夹具真的带元数据
 for name in ('with_gps.jpg', 'plain_exif.jpg'):
     im = Image.open(os.path.join(OUT, name))

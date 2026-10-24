@@ -14,8 +14,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const m = html.match(/\/\*CORE-BEGIN\*\/([\s\S]*?)\/\*CORE-END\*\//);
 if (!m) throw new Error('index.html 中找不到 CORE 标记');
-const { detectFormat, parseExif, stripJpeg, stripPng, stripWebp, stripGif, outName } =
-  new Function(m[1] + '\nreturn { detectFormat, parseExif, stripJpeg, stripPng, stripWebp, stripGif, outName };')();
+const { detectFormat, parseExif, stripJpeg, stripPng, stripWebp, stripGif, outName, tiffOf } =
+  new Function(m[1] + '\nreturn { detectFormat, parseExif, stripJpeg, stripPng, stripWebp, stripGif, outName, tiffOf };')();
 
 let failed = 0;
 function check(name, cond, extra = '') {
@@ -218,6 +218,28 @@ const write = (p, b) => fs.writeFileSync(path.join(OUT, p), b);
   check('outName 同格式不改扩展名', outName('photo.webp', 'image/webp') === 'photo_noexif.webp');
   check('outName 大写扩展名归一', outName('PHOTO.JPG', 'image/jpeg') === 'PHOTO_noexif.jpg');
   check('outName 无扩展名补全', outName('photo', 'image/png') === 'photo_noexif.png');
+}
+
+// 11. PNG/WebP 的 EXIF 载荷提取与方向解析（竖拍转正依赖）
+{
+  const rp = stripPng(read('with_exif.png'));
+  check('png: 返回 eXIf 的 TIFF 载荷', rp.exifTiff && (rp.exifTiff[0] === 0x49 || rp.exifTiff[0] === 0x4D));
+  const ro = stripPng(read('with_orient.png'));
+  check('png: 解析出 Orientation=6', parseExif(tiffOf(ro.exifTiff)).orientation === 6,
+    `实际 ${ro.exifTiff ? parseExif(tiffOf(ro.exifTiff)).orientation : '无载荷'}`);
+  const rw = stripWebp(read('with_exif.webp'));
+  check('webp: 返回 EXIF 的 TIFF 载荷', rw.exifTiff && (rw.exifTiff[0] === 0x49 || rw.exifTiff[0] === 0x4D));
+  const rw2 = stripWebp(read('with_orient.webp'));
+  check('webp: 解析出 Orientation=6', parseExif(tiffOf(rw2.exifTiff)).orientation === 6,
+    `实际 ${rw2.exifTiff ? parseExif(tiffOf(rw2.exifTiff)).orientation : '无载荷'}`);
+
+  // tiffOf：剥离多余的 "Exif\0\0" 前缀；垃圾输入返回 null
+  const prefixed = new Uint8Array([0x45, 0x78, 0x69, 0x66, 0, 0, 0x49, 0x49, 0x2A, 0, 8, 0, 0, 0]);
+  const t1 = tiffOf(prefixed);
+  check('tiffOf 剥离 Exif 前缀', t1 && t1[0] === 0x49 && t1[1] === 0x49);
+  check('tiffOf 无前缀直通', tiffOf(prefixed.subarray(6)) !== null);
+  check('tiffOf 垃圾输入返回 null', tiffOf(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])) === null);
+  check('tiffOf 空输入返回 null', tiffOf(null) === null);
 }
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');
